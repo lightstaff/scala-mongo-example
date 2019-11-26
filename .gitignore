@@ -1,0 +1,6 @@
+# IntelliJ
+.idea
+
+# SBT
+target
+**/*/target
