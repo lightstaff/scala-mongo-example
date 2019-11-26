@@ -8,8 +8,6 @@ trait Repository[F[_]] {
 
   def findAll: F[Seq[A]]
 
-  def findOne(_id: ObjectId): F[Option[A]]
-
   def insert(entity: A): F[Unit]
 
   def update(entity: A): F[Unit]

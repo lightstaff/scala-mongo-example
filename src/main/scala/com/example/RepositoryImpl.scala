@@ -1,42 +1,47 @@
 package com.example
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 import cats.data.Kleisli
+import cats.effect.{ContextShift, IO}
 import org.mongodb.scala.MongoCollection
 import org.mongodb.scala.bson.ObjectId
 import org.mongodb.scala.model.Filters._
 import org.mongodb.scala.model.Updates._
 
-class RepositoryImpl(implicit ec: ExecutionContext)
-    extends Repository[Kleisli[Future, MongoCollection[A], *]] {
+object RepositoryImpl extends Repository[Kleisli[IO, MongoCollection[A], *]] {
 
-  override def drop: Kleisli[Future, MongoCollection[A], Unit] =
-    Kleisli(c => c.drop().toFuture().map(_ => ()))
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
-  override def findAll: Kleisli[Future, MongoCollection[A], Seq[A]] =
-    Kleisli(c => c.find().toFuture())
+  override def drop: Kleisli[IO, MongoCollection[A], Unit] =
+    Kleisli(c => IO.fromFuture(IO(c.drop().toFuture())).map(_ => ()))
 
-  override def findOne(
-      _id: ObjectId
-  ): Kleisli[Future, MongoCollection[A], Option[A]] =
-    Kleisli(c => c.find(equal("_id", _id)).first().toFutureOption())
+  override def findAll: Kleisli[IO, MongoCollection[A], Seq[A]] =
+    Kleisli(c => IO.fromFuture(IO(c.find().toFuture())))
 
-  override def insert(entity: A): Kleisli[Future, MongoCollection[A], Unit] =
-    Kleisli(c => c.insertOne(entity).toFuture().map(_ => ()))
+  override def insert(entity: A): Kleisli[IO, MongoCollection[A], Unit] =
+    Kleisli(c => IO.fromFuture(IO(c.insertOne(entity).toFuture())).map(_ => ()))
 
-  override def update(entity: A): Kleisli[Future, MongoCollection[A], Unit] =
+  override def update(entity: A): Kleisli[IO, MongoCollection[A], Unit] =
     Kleisli(
       c =>
-        c.updateOne(equal("_id", entity._id),
-                     combine(set("name", entity.name),
-                             set("children", entity.children)))
-          .toFuture()
+        IO.fromFuture(
+            IO(
+              c.updateOne(equal("_id", entity._id),
+                           combine(set("name", entity.name),
+                                   set("children", entity.children)))
+                .toFuture()
+            )
+          )
           .map(_ => ())
     )
 
   override def delete(
       _id: ObjectId
-  ): Kleisli[Future, MongoCollection[A], Unit] =
-    Kleisli(c => c.deleteOne(equal("_id", _id)).toFuture().map(_ => ()))
+  ): Kleisli[IO, MongoCollection[A], Unit] =
+    Kleisli(
+      c =>
+        IO.fromFuture(IO(c.deleteOne(equal("_id", _id)).toFuture()))
+          .map(_ => ())
+    )
 }
