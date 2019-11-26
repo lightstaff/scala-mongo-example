@@ -8,6 +8,7 @@ import scala.util.{Failure, Success, Try}
 
 import cats.data.Kleisli
 import cats.implicits._
+import com.typesafe.scalalogging.LazyLogging
 import org.bson.codecs.configuration.CodecRegistries
 import org.mongodb.scala._
 import org.mongodb.scala.bson.ObjectId
@@ -16,7 +17,7 @@ import org.mongodb.scala.bson.codecs.Macros._
 import org.mongodb.scala.model.Filters._
 import org.mongodb.scala.model.Updates._
 
-object Main extends App {
+object Main extends App with LazyLogging {
 
   implicit val executionContext: ExecutionContext = ExecutionContext.global
 
@@ -41,14 +42,18 @@ object Main extends App {
 
   val id3 = new ObjectId()
 
-  println("=========== start version of normal ==========")
+  logger.info("=========== start version of normal ==========")
 
   val f1 = for {
     _ <- mongoCollection.drop()
-    _ <- mongoCollection.insertMany(
-          Seq(A(id1, "a_1", Seq(B("b_1"), B("b_2"))),
-              A(id2, "a_2", Seq.empty[B]),
-              A(id3, "a_3", Seq.empty[B]))
+    _ <- mongoCollection.insertOne(
+          A(id1, "a_1", Seq(B("b_1"), B("b_2")))
+        )
+    _ <- mongoCollection.insertOne(
+          A(id2, "a_2", Seq.empty[B])
+        )
+    _ <- mongoCollection.insertOne(
+          A(id3, "a_3", Seq.empty[B])
         )
     _ <- mongoCollection.updateOne(
           equal("_id", id2),
@@ -59,15 +64,15 @@ object Main extends App {
   } yield found
 
   f1.subscribe(new Observer[A] {
-    override def onNext(result: A): Unit = println(result)
+    override def onNext(result: A): Unit = logger.info(result.toString)
 
-    override def onError(e: Throwable): Unit = println(e.getMessage)
+    override def onError(e: Throwable): Unit = logger.error("failed!!")
 
     override def onComplete(): Unit =
-      println("=========== finish version of normal ==========")
+      logger.info("=========== finish version of normal ==========")
   })
 
-  println("=========== start version of repository ==========")
+  logger.info("=========== start version of repository ==========")
 
   val f2 = for {
     _ <- RepositoryImpl.drop
@@ -91,9 +96,16 @@ object Main extends App {
     found <- RepositoryImpl.findAll
   } yield found
 
-  f2.run(mongoCollection).unsafeRunSync().foreach(println)
+  f2.run(mongoCollection).unsafeRunAsync {
+    case Right(v) =>
+      v.foreach(a => logger.info(a.toString))
+      logger.info("=========== finish version of repository ==========")
 
-  println("=========== finish version of repository ==========")
+    case Left(_) =>
+      logger.error("failed!!")
+  }
+
+  Await.result(Future(Thread.sleep(30000)), Duration(30, TimeUnit.SECONDS))
 
   mongoClient.close()
 }
